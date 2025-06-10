@@ -25,6 +25,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdint.h>
+#include "pca9685/pca9685_wrapper.h"
+#include "i2c.h"
 
 /* USER CODE END Includes */
 
@@ -35,7 +38,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define PCA9685Address 0x40
 
 /* USER CODE END PD */
 
@@ -97,7 +99,7 @@ void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 void MX_FREERTOS_Init(void)
 {
   /* USER CODE BEGIN Init */
-
+  pca9685_init();
   /* USER CODE END Init */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -202,6 +204,10 @@ void getServoPos(void *argument)
 void moveServo(void *argument)
 {
   /* USER CODE BEGIN moveServo */
+
+  // initalize servo driver
+  pca9685_init();
+
   /* Infinite loop */
   for (;;)
   {

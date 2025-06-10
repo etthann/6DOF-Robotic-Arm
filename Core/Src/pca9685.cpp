@@ -1,44 +1,60 @@
-#include "pca9685.h"
+#include "pca9685/pca9685.h"
 #include <cstdint>
 #include "cmsis_os2.h"
+#include "pca9685/pca9685_wrapper.h"
+#include "i2c.h"
 
-void pca9685::init()
+#define PCA9685Address 0x40
+
+pca9685 pca9685Driver(&hi2c1, PCA9685Address);
+
+extern "C"
 {
 
-    uint8_t mode1Address = 0x00;
-    uint8_t mode1;
+    pca9685::pca9685(I2C_HandleTypeDef *hi2c, uint8_t address)
+    {
+        this->address = address;
+        this->hi2c = hi2c;
+    }
 
-    // retrieve mode1 config byte
-    HAL_I2C_Mem_Read(this->hi2c, this->address, mode1Address, I2C_MEMADD_SIZE_8BIT, &mode1, 1, HAL_MAX_DELAY);
+    void pca9685::pca9685_init()
+    {
 
-    // turn off restart mode and set to sleep mode
-    uint8_t sleepMode = (mode1 & 0x7F) | 0x10;
+        uint8_t mode1Address = 0x00;
+        uint8_t mode1;
 
-    // set servo driver to sleep mode
-    HAL_I2C_Mem_Write(this->hi2c, this->address, mode1Address, I2C_MEMADD_SIZE_8BIT, &sleepMode, 1, HAL_MAX_DELAY);
+        // retrieve mode1 config byte
+        HAL_I2C_Mem_Read(this->hi2c, this->address, mode1Address, I2C_MEMADD_SIZE_8BIT, &mode1, 1, HAL_MAX_DELAY);
 
-    // set prescalar
-    this->setPrescaler();
+        // turn off restart mode and set to sleep mode
+        uint8_t sleepMode = (mode1 & 0x7F) | 0x10;
 
-    uint8_t wakeMode = mode1 & ~0x10;
+        // set servo driver to sleep mode
+        HAL_I2C_Mem_Write(this->hi2c, this->address, mode1Address, I2C_MEMADD_SIZE_8BIT, &sleepMode, 1, HAL_MAX_DELAY);
 
-    // set servo driver to wake mode
-    HAL_I2C_Mem_Write(this->hi2c, this->address, mode1Address, I2C_MEMADD_SIZE_8BIT, &wakeMode, 1, HAL_MAX_DELAY);
+        // set prescalar
+        this->setPrescaler();
 
-    osDelay(1);
+        uint8_t wakeMode = mode1 & ~0x10;
 
-    // restart servo driver
-    uint8_t restart = mode1 | 0x80;
-    HAL_I2C_Mem_Write(this->hi2c, this->address, mode1Address, I2C_MEMADD_SIZE_8BIT, &restart, 1, HAL_MAX_DELAY);
-}
+        // set servo driver to wake mode
+        HAL_I2C_Mem_Write(this->hi2c, this->address, mode1Address, I2C_MEMADD_SIZE_8BIT, &wakeMode, 1, HAL_MAX_DELAY);
 
-void pca9685::setPrescaler(int pwmFreq = 50)
-{
-    int prescale_val = 25000000 / (pwmFreq * 4096) - 1;
+        osDelay(1);
 
-    uint8_t prescale = static_cast<uint8_t>(prescale_val);
+        // restart servo driver
+        uint8_t restart = mode1 | 0x80;
+        HAL_I2C_Mem_Write(this->hi2c, this->address, mode1Address, I2C_MEMADD_SIZE_8BIT, &restart, 1, HAL_MAX_DELAY);
+    }
 
-    uint8_t prescalerAddress = 0xFE;
+    void pca9685::setPrescaler(int pwmFreq = 50)
+    {
+        int prescale_val = 25000000 / (pwmFreq * 4096) - 1;
 
-    HAL_I2C_Mem_Write(this->hi2c, this->address, prescalerAddress, I2C_MEMADD_SIZE_8BIT, &prescale, 1, HAL_MAX_DELAY);
+        uint8_t prescale = static_cast<uint8_t>(prescale_val);
+
+        uint8_t prescalerAddress = 0xFE;
+
+        HAL_I2C_Mem_Write(this->hi2c, this->address, prescalerAddress, I2C_MEMADD_SIZE_8BIT, &prescale, 1, HAL_MAX_DELAY);
+    }
 }

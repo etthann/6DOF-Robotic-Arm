@@ -52,30 +52,30 @@
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
-  .name = "defaultTask",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+    .name = "defaultTask",
+    .stack_size = 128 * 4,
+    .priority = (osPriority_t)osPriorityNormal,
 };
 /* Definitions for chessMove */
 osThreadId_t chessMoveHandle;
 const osThreadAttr_t chessMove_attributes = {
-  .name = "chessMove",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+    .name = "chessMove",
+    .stack_size = 128 * 4,
+    .priority = (osPriority_t)osPriorityLow,
 };
 /* Definitions for calcServoPos */
 osThreadId_t calcServoPosHandle;
 const osThreadAttr_t calcServoPos_attributes = {
-  .name = "calcServoPos",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+    .name = "calcServoPos",
+    .stack_size = 128 * 4,
+    .priority = (osPriority_t)osPriorityNormal,
 };
 /* Definitions for moveServos */
 osThreadId_t moveServosHandle;
 const osThreadAttr_t moveServos_attributes = {
-  .name = "moveServos",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal3,
+    .name = "moveServos",
+    .stack_size = 128 * 4,
+    .priority = (osPriority_t)osPriorityNormal3,
 };
 
 /* Private function prototypes -----------------------------------------------*/
@@ -91,11 +91,12 @@ void moveServo(void *argument);
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
 /**
-  * @brief  FreeRTOS initialization
-  * @param  None
-  * @retval None
-  */
-void MX_FREERTOS_Init(void) {
+ * @brief  FreeRTOS initialization
+ * @param  None
+ * @retval None
+ */
+void MX_FREERTOS_Init(void)
+{
   /* USER CODE BEGIN Init */
 
   /* USER CODE END Init */
@@ -136,7 +137,6 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN RTOS_EVENTS */
   /* add events, ... */
   /* USER CODE END RTOS_EVENTS */
-
 }
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -207,6 +207,7 @@ void moveServo(void *argument)
 
   // initalize servo driver
   PCA9685_Init();
+  // StartIKTask();
 
   /* Infinite loop */
   for (;;)
@@ -221,4 +222,3 @@ void moveServo(void *argument)
 /* USER CODE BEGIN Application */
 
 /* USER CODE END Application */
-

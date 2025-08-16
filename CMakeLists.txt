@@ -54,6 +54,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/pca9685/pca9685.cpp
     Core/Src/pca9685/pca9685_wrapper.cpp
     Core/Src/pca9685/pca9685_utils.cpp
+    Core/Src/ik/ik_solver.cpp
 )
 
 # Add include paths
@@ -61,6 +62,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
     Core/Inc
     Core/Inc/pca9685
+    Core/Inc/ik
 )
 
 # Add project symbols (macros)

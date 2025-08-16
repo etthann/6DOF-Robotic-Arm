@@ -2,7 +2,7 @@
 
 bool ik6_spherical(const IKParams &P, const Pose &goal, float out_deg[6], bool elbow_up)
 {
-    // 1. Desired    Orientation
+    // 1. Desired Orientation
     float R06[3][3];
     rpyToRotationMatrix(goal.roll, goal.pitch, goal.yaw, R06);
     float nx = R06[0][2];

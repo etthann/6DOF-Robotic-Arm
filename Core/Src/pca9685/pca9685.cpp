@@ -32,7 +32,7 @@ void pca9685::init()
     osDelay(1);
 
     // set prescalar
-    this->setPrescaler();
+    this->setPrescaler(50);
 
     uint8_t wakeMode = mode1 & ~PCA9685_REG::SLEEP_ENABLED;
 

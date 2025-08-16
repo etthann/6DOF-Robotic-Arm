@@ -14,7 +14,7 @@ extern "C"
         pca9685Sensor.init();
     }
 
-    void PCA9685_SetServoAngle(uint8_t channel, float deg = 90.0f)
+    void PCA9685_SetServoAngle(uint8_t channel, float deg)
     {
         pca9685Sensor.setPWM(channel, deg);
     }

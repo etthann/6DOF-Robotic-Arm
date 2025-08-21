@@ -20,6 +20,7 @@
 #include "main.h"
 #include "cmsis_os.h"
 #include "adc.h"
+#include "dma.h"
 #include "i2c.h"
 #include "spi.h"
 #include "usart.h"
@@ -48,6 +49,7 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+extern DMA_HandleTypeDef hdma_usart2_tx;
 
 /* USER CODE END PV */
 
@@ -97,6 +99,7 @@ int main(void)
   MX_SPI2_Init();
   MX_USART2_UART_Init();
   MX_ADC1_Init();
+  MX_DMA_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */

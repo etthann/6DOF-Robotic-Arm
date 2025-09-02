@@ -118,7 +118,7 @@ extern "C"
     {
         *t5 = atan2f(-R36[2][0], sqrtf(R36[0][0] * R36[0][0] + R36[1][0] * R36[1][0]));
         // is pitch angle greater than 0.000001,
-        if (fabsf(sin(*t5)) > 1e-6f)
+        if (fabsf(cosf(*t5)) > 1e-6f)
         {
             *t6 = atan2f(R36[1][0], R36[0][0]);
             *t4 = atan2f(R36[2][1], R36[2][2]);

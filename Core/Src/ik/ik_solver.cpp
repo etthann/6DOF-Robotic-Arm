@@ -36,7 +36,7 @@ extern "C"
 
         cosT3 = constrain(cosT3, -1.0f, 1.0f);
 
-        float sinT3 = sqrtf(fmaxf(0.01f, 1.0f - cosT3 * cosT3));
+        float sinT3 = sqrtf(fmaxf(0.0f, 1.0f - cosT3 * cosT3));
 
         if (elbow_up)
         {
@@ -58,7 +58,7 @@ extern "C"
         float t4, t5, t6;
         wristFromR36(R36, &t4, &t5, &t6);
 
-        // 6) to degrees
+        // 6. to degrees
         out_deg[0] = rad2deg(t1);
         out_deg[1] = rad2deg(t2);
         out_deg[2] = rad2deg(t3);

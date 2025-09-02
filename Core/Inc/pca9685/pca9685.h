@@ -10,10 +10,11 @@ class pca9685
 private:
     uint8_t address;
     I2C_HandleTypeDef *hi2c;
+    int freq;
     void setPrescaler(int updateFreq);
 
 public:
-    pca9685(I2C_HandleTypeDef *hi2c, uint8_t address);
+    pca9685(I2C_HandleTypeDef *hi2c, uint8_t address, int freq);
     void init();
     void setPWM(int joint, float deg);
 };

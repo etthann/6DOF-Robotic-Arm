@@ -6,7 +6,7 @@ extern "C"
 {
 #endif
 
-    void PCA9685_Init(void);
+    void PCA9685_Init();
     void PCA9685_SetServoAngle(uint8_t channel, float deg);
 
 #ifdef __cplusplus

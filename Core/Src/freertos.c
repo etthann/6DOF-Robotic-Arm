@@ -75,13 +75,7 @@ const osThreadAttr_t defaultTask_attributes = {
 	.stack_size = 128 * 4,
 	.priority = (osPriority_t)osPriorityNormal,
 };
-/* Definitions for chessMove */
-osThreadId_t chessMoveHandle;
-const osThreadAttr_t chessMove_attributes = {
-	.name = "chessMove",
-	.stack_size = 128 * 4,
-	.priority = (osPriority_t)osPriorityLow,
-};
+
 /* Definitions for calcServoPos */
 osThreadId_t calcServoPosHandle;
 const osThreadAttr_t calcServoPos_attributes = {
@@ -107,7 +101,6 @@ float to_servo_deg(int j, float ik_deg);
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void *argument);
-void getChessMove(void *argument);
 void getServoPos(void *argument);
 void moveServo(void *argument);
 
@@ -122,6 +115,9 @@ void MX_FREERTOS_Init(void)
 {
 	/* USER CODE BEGIN Init */
 
+	// initialize servo driver
+	PCA9685_Init(50);
+	osDelay(100);
 	/* USER CODE END Init */
 
 	/* USER CODE BEGIN RTOS_MUTEX */
@@ -147,12 +143,12 @@ void MX_FREERTOS_Init(void)
 	configASSERT(adcBlockPtrQ && angleQ);
 	/* USER CODE END RTOS_QUEUES */
 
+	// start DMA
+	HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adcBuff, ADC_BUF_LEN);
+
 	/* Create the thread(s) */
 	/* creation of defaultTask */
 	defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
-
-	/* creation of chessMove */
-	chessMoveHandle = osThreadNew(getChessMove, NULL, &chessMove_attributes);
 
 	/* creation of calcServoPos */
 	calcServoPosHandle = osThreadNew(getServoPos, NULL, &calcServoPos_attributes);
@@ -187,24 +183,6 @@ void StartDefaultTask(void *argument)
 	/* USER CODE END StartDefaultTask */
 }
 
-/* USER CODE BEGIN Header_getChessMove */
-/**
- * @brief Function implementing the chessMove thread.
- * @param argument: Not used
- * @retval None
- */
-/* USER CODE END Header_getChessMove */
-void getChessMove(void *argument)
-{
-	/* USER CODE BEGIN getChessMove */
-	/* Infinite loop */
-	for (;;)
-	{
-		osDelay(1);
-	}
-	/* USER CODE END getChessMove */
-}
-
 /* USER CODE BEGIN Header_getServoPos */
 /**
  * @brief Function implementing the calcServoPos thread.
@@ -215,35 +193,8 @@ void getChessMove(void *argument)
 void getServoPos(void *argument)
 {
 	/* USER CODE BEGIN getServoPos */
-
-	// HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adcBuff, ADC_BUF_LEN);
-
 	for (;;)
 	{
-
-		uint8_t prescale;
-		uint8_t mode1;
-		char msg[64];
-		if (HAL_I2C_IsDeviceReady(&hi2c1, 0x40 << 1, 5, HAL_MAX_DELAY))
-		{
-			HAL_I2C_Mem_Read(&hi2c1, 0x40 << 1, 0x00, I2C_MEMADD_SIZE_8BIT, &mode1, 1, HAL_MAX_DELAY);
-			HAL_I2C_Mem_Read(&hi2c1, 0x40 << 1, 0xFE, I2C_MEMADD_SIZE_8BIT, &prescale, 1, HAL_MAX_DELAY);
-
-			sprintf(msg, "Mode1 Reg = 0x%02X\r\nPrescale Val = 0x%02X\r\n", mode1, prescale);
-			uart_print(msg);
-		}
-
-		for (uint8_t addr = 1; addr < 127; addr++)
-		{
-			if (HAL_I2C_IsDeviceReady(&hi2c1, addr << 1, 1, 10) == HAL_OK)
-			{
-				char msg[32];
-				snprintf(msg, sizeof(msg), "Found device at 0x%02X\r\n", addr << 1);
-				uart_print(msg);
-			}
-			HAL_Delay(10);
-		}
-
 		uint16_t *data = NULL;
 
 		// is there data in ADC buff pointer
@@ -320,15 +271,6 @@ void moveServo(void *argument)
 
 	float currentAngle = 0;
 	float targetAngle = 0;
-	float error = 0;
-	static float prevError = 0;
-	float Kp = 0;
-	float Ki = 0;
-	float Kd = 0;
-	float derivative = 0;
-	static float integral = 0;
-	float dt = 5.0f;
-	float output = 0;
 
 	Pose targetPose = {
 		.x = 100.0f,   // 100mm in X direction
@@ -339,21 +281,11 @@ void moveServo(void *argument)
 		.roll = 0.0f   // 0 degrees roll
 	};
 
-	// initalize pca9685 driver
-	PCA9685_Init();
-	osDelay(1000);
 	char msg[50];
 
 	/* Infinite loop */
 	for (;;)
 	{
-
-		// Test, to see if servo moves
-		PCA9685_SetServoAngle(0, 90);
-
-		osDelay(10000); // 10s
-
-		continue;
 
 		if (xQueueReceive(angleQ, &currentAngle, portMAX_DELAY) != pdTRUE)
 		{
@@ -371,7 +303,6 @@ void moveServo(void *argument)
 		// for base angle
 		targetAngle = jointDeg[0];
 		sprintf(msg, "PID output = %.2f\r\n", targetAngle);
-		uart_print(msg);
 
 		// move servos
 		for (int i = 0; i < 6; i++)

@@ -10,12 +10,12 @@ extern "C"
     // define struc
     typedef struct
     {
-        float x;
-        float y;
-        float z;
-        float yaw;
-        float pitch;
-        float roll;
+        float x;     // mm
+        float y;     // mm
+        float z;     // mm
+        float yaw;   // radians
+        float pitch; // radians
+        float roll;  // radians
     } Pose;
 
     // Rotation Order -> ZYX (Yaw Pitch Roll)
@@ -86,7 +86,7 @@ extern "C"
     static inline void r03FromT123(float t1, float t2, float t3, float R03[3][3])
     {
         float cosT1 = cosf(t1);
-        float costT2 = cosf(t2);
+        float cosT2 = cosf(t2);
         float cosT3 = cosf(t3);
         float sinT1 = sinf(t1);
         float sinT2 = sinf(t2);
@@ -98,9 +98,9 @@ extern "C"
             {0, 0, 1}};
 
         float R12[3][3] = {
-            {costT2, 0, sinT2},
+            {cosT2, 0, sinT2},
             {0, 1, 0},
-            {-sinT2, 0, costT2}};
+            {-sinT2, 0, cosT2}};
 
         float R23[3][3] = {
             {cosT3, 0, sinT3},
@@ -118,15 +118,12 @@ extern "C"
     {
         *t5 = atan2f(-R36[2][0], sqrtf(R36[0][0] * R36[0][0] + R36[1][0] * R36[1][0]));
         // is pitch angle greater than 0.000001,
-        if (fabsf(cosf(*t5)) > 1e-6f)
+        if (fabsf(sin(*t5)) > 1e-6f)
         {
-            // get roll angle
             *t6 = atan2f(R36[1][0], R36[0][0]);
-            // get yaw angle
             *t4 = atan2f(R36[2][1], R36[2][2]);
         }
         else
-        // gimbal lock
         {
             *t6 = 0.0f;
             *t4 = atan2f(-R36[0][1], R36[1][1]);

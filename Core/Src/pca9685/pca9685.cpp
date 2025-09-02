@@ -6,12 +6,11 @@
 #include "pca9685/pca9685_utils.h"
 #include <iostream>
 
-pwmChannel pwmValues[16];
-
-pca9685::pca9685(I2C_HandleTypeDef *hi2c, uint8_t address)
+pca9685::pca9685(I2C_HandleTypeDef *hi2c, uint8_t address, int freq)
 {
     this->address = address;
     this->hi2c = hi2c;
+    this->freq = freq;
 }
 
 void pca9685::init()
@@ -22,8 +21,8 @@ void pca9685::init()
     HAL_I2C_Mem_Read(this->hi2c, this->address, PCA9685_REG::MODE1,
                      I2C_MEMADD_SIZE_8BIT, &mode1, 1, HAL_MAX_DELAY);
 
-    // Set prescaler (handles sleep/wake inside)
-    this->setPrescaler(50);
+    // Set prescaler
+    this->setPrescaler(this->freq);
 
     // MODE2: totem pole
     uint8_t mode2 = PCA9685_REG::OUTDRV;
@@ -66,7 +65,7 @@ void pca9685::setPrescaler(int updateFreq)
 
 void pca9685::setPWM(int joint, float angleDeg)
 {
-    uint16_t counts = degToCounts(angleDeg, 1000.0f, 2000.0f, 50.0f);
+    uint16_t counts = degToCounts(angleDeg, 1000.0f, 2000.0f, this->freq);
 
     uint8_t reg = PCA9685_REG::LED0_ON_L + 4 * joint;
     uint8_t buffer[4] = {0x00, 0x00, (uint8_t)(counts & 0xFF), (uint8_t)((counts >> 8) & 0xFF)};

@@ -1,21 +1,13 @@
 #ifndef ARM_PARAMS_H
 #define ARM_PARAMS_H
 
-#ifdef _cplusplus
-extern "C"
+typedef struct
 {
-#endif
-    typedef struct
-    {
-        float d1;
-        float a2;
-        float a3;
-        float d6;
-    } IKParams;
-
-#ifdef _cplusplus
-}
-#endif
+    float d1;
+    float a2;
+    float a3;
+    float d6;
+} IKParams;
 
 // in mm
 static const IKParams ArmDimensions = {

@@ -10,7 +10,7 @@ class pca9685
 private:
     uint8_t address;
     I2C_HandleTypeDef *hi2c;
-    void setPrescaler(int val);
+    void setPrescaler(int updateFreq);
 
 public:
     pca9685(I2C_HandleTypeDef *hi2c, uint8_t address);

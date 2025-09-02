@@ -34,8 +34,11 @@
 #include "usart.h"
 #include "dma.h"
 #include "semphr.h"
+#include "ik/ik_solver.h"
+#include "ik/arm_params.h"
 
 /* USER CODE END Includes */
+
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
@@ -54,12 +57,15 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
-// Declare the DMA handle for USART2 TX
-extern DMA_HandleTypeDef hdma_usart2_tx;
+float sign[6] = {+1, -1, +1, +1, +1, +1};
+float offset[6] = {90, 90, 90, 90, 90, 90};
+float min[6] = {0, 0, 0, 0, 0, 0};
+float max[6] = {180, 180, 180, 180, 180, 180};
+
 uint16_t adcBuff[ADC_BUF_LEN];
-SemaphoreHandle_t adcSemaphore;
-SemaphoreHandle_t uartSemaphore;
-QueueHandle_t adcQueue;
+QueueHandle_t adcBlockPtrQ; // queue of pointers to filled halves
+QueueHandle_t angleQ;
+SemaphoreHandle_t i2c1Mutex;
 
 /* USER CODE END Variables */
 /* Definitions for defaultTask */
@@ -68,6 +74,13 @@ const osThreadAttr_t defaultTask_attributes = {
 	.name = "defaultTask",
 	.stack_size = 128 * 4,
 	.priority = (osPriority_t)osPriorityNormal,
+};
+/* Definitions for chessMove */
+osThreadId_t chessMoveHandle;
+const osThreadAttr_t chessMove_attributes = {
+	.name = "chessMove",
+	.stack_size = 128 * 4,
+	.priority = (osPriority_t)osPriorityLow,
 };
 /* Definitions for calcServoPos */
 osThreadId_t calcServoPosHandle;
@@ -86,10 +99,15 @@ const osThreadAttr_t moveServos_attributes = {
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
+void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef *hadc);
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc);
+void uart_print(const char *msg);
+float to_servo_deg(int j, float ik_deg);
 
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void *argument);
+void getChessMove(void *argument);
 void getServoPos(void *argument);
 void moveServo(void *argument);
 
@@ -108,14 +126,12 @@ void MX_FREERTOS_Init(void)
 
 	/* USER CODE BEGIN RTOS_MUTEX */
 	/* add mutexes, ... */
+	i2c1Mutex = xSemaphoreCreateMutex();
+	configASSERT(i2c1Mutex);
 	/* USER CODE END RTOS_MUTEX */
 
 	/* USER CODE BEGIN RTOS_SEMAPHORES */
 	/* add semaphores, ... */
-	adcSemaphore = xSemaphoreCreateBinary();
-	uartSemaphore = xSemaphoreCreateBinary();
-	configASSERT(adcSemaphore != NULL);
-	configASSERT(uartSemaphore != NULL);
 	/* USER CODE END RTOS_SEMAPHORES */
 
 	/* USER CODE BEGIN RTOS_TIMERS */
@@ -124,13 +140,19 @@ void MX_FREERTOS_Init(void)
 
 	/* USER CODE BEGIN RTOS_QUEUES */
 	/* add queues, ... */
-	adcQueue = xQueueCreate(8, sizeof(uint16_t) * ADC_BUF_LEN);
-	configASSERT(adcQueue != NULL);
+
+	// send pointers
+	adcBlockPtrQ = xQueueCreate(4, sizeof(uint16_t *));
+	angleQ = xQueueCreate(16, sizeof(float));
+	configASSERT(adcBlockPtrQ && angleQ);
 	/* USER CODE END RTOS_QUEUES */
 
 	/* Create the thread(s) */
 	/* creation of defaultTask */
 	defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+
+	/* creation of chessMove */
+	chessMoveHandle = osThreadNew(getChessMove, NULL, &chessMove_attributes);
 
 	/* creation of calcServoPos */
 	calcServoPosHandle = osThreadNew(getServoPos, NULL, &calcServoPos_attributes);
@@ -160,10 +182,27 @@ void StartDefaultTask(void *argument)
 	/* Infinite loop */
 	for (;;)
 	{
-		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-		osDelay(1000);
+		osDelay(1);
 	}
 	/* USER CODE END StartDefaultTask */
+}
+
+/* USER CODE BEGIN Header_getChessMove */
+/**
+ * @brief Function implementing the chessMove thread.
+ * @param argument: Not used
+ * @retval None
+ */
+/* USER CODE END Header_getChessMove */
+void getChessMove(void *argument)
+{
+	/* USER CODE BEGIN getChessMove */
+	/* Infinite loop */
+	for (;;)
+	{
+		osDelay(1);
+	}
+	/* USER CODE END getChessMove */
 }
 
 /* USER CODE BEGIN Header_getServoPos */
@@ -176,24 +215,93 @@ void StartDefaultTask(void *argument)
 void getServoPos(void *argument)
 {
 	/* USER CODE BEGIN getServoPos */
+
+	// HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adcBuff, ADC_BUF_LEN);
+
 	for (;;)
 	{
-		HAL_ADC_Start_DMA(&hadc1, (uint32_t)adcBuff, ADC_BUF_LEN);
 
-		if (xSemaphoreTake(adcSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
+		uint8_t prescale;
+		uint8_t mode1;
+		char msg[64];
+		if (HAL_I2C_IsDeviceReady(&hi2c1, 0x40 << 1, 5, HAL_MAX_DELAY))
 		{
-			continue;
+			HAL_I2C_Mem_Read(&hi2c1, 0x40 << 1, 0x00, I2C_MEMADD_SIZE_8BIT, &mode1, 1, HAL_MAX_DELAY);
+			HAL_I2C_Mem_Read(&hi2c1, 0x40 << 1, 0xFE, I2C_MEMADD_SIZE_8BIT, &prescale, 1, HAL_MAX_DELAY);
+
+			sprintf(msg, "Mode1 Reg = 0x%02X\r\nPrescale Val = 0x%02X\r\n", mode1, prescale);
+			uart_print(msg);
 		}
 
-		HAL_UART_Transmit(&huart2, (uint8_t *)adcBuff, ADC_BUF_LEN * sizeof(uint16_t), HAL_MAX_DELAY);
-
-		if (xQueueSend(adcQueue, adcBuff, 0) != pdTRUE)
+		for (uint8_t addr = 1; addr < 127; addr++)
 		{
-			// Queue full — skip or log
-			continue;
+			if (HAL_I2C_IsDeviceReady(&hi2c1, addr << 1, 1, 10) == HAL_OK)
+			{
+				char msg[32];
+				snprintf(msg, sizeof(msg), "Found device at 0x%02X\r\n", addr << 1);
+				uart_print(msg);
+			}
+			HAL_Delay(10);
 		}
 
-		osDelay(1000);
+		uint16_t *data = NULL;
+
+		// is there data in ADC buff pointer
+		if (xQueueReceive(adcBlockPtrQ, &data, portMAX_DELAY) == pdTRUE)
+		{
+			const size_t halfBuffSize = ADC_BUF_LEN / 2;
+
+			uint32_t acc = 0;
+			size_t count = 0;
+
+			// decimate data
+			for (int i = 0; i < halfBuffSize; i += 8)
+			{
+				// sample every 8th value, add them all up to get rough avg
+				acc += data[i];
+				count++;
+			}
+
+			float avgCount = (float)acc / (float)count;
+
+			static float y = 0.0f;
+			const float alpha = 0.1f;
+
+			// first-order IIR filter
+			// y[n] = y[n-1] + alpha * (x[n] - y[n-1])
+			y += alpha * (avgCount - y);
+
+			// map counts -> angle (two-point calibration; fill these)
+			// counts c1->θ1, c2->θ2  (e.g., (300, 0°), (3800, 180°))
+			const float c1 = 300.0f, c2 = 3800.0f, th1 = 0.0f, th2 = 180.0f;
+			const float m = (th2 - th1) / (c2 - c1);
+			float angle_deg = m * (y - c1) + th1;
+
+			// print angle to serial com
+			char buff[64];
+			static uint32_t lastTick = 0;
+
+			// wait 500ms before reading angle again
+			if (xTaskGetTickCount() - lastTick > pdMS_TO_TICKS(500))
+			{
+				lastTick = xTaskGetTickCount();
+				snprintf(buff, sizeof(buff), "ADC AVG: %.2f\r\n", angle_deg);
+				uart_print(buff);
+			}
+
+			// constrain angle
+			if (angle_deg < 0)
+			{
+				angle_deg = 0;
+			}
+
+			if (angle_deg > 180)
+			{
+				angle_deg = 180;
+			}
+
+			xQueueSend(angleQ, &angle_deg, 0);
+		}
 	}
 }
 /* USER CODE END getServoPos */
@@ -208,32 +316,71 @@ void getServoPos(void *argument)
 void moveServo(void *argument)
 {
 	/* USER CODE BEGIN moveServo */
-	uint16_t receivedData[ADC_BUF_LEN];
+	float jointDeg[6];
+
+	float currentAngle = 0;
+	float targetAngle = 0;
+	float error = 0;
+	static float prevError = 0;
+	float Kp = 0;
+	float Ki = 0;
+	float Kd = 0;
+	float derivative = 0;
+	static float integral = 0;
+	float dt = 5.0f;
+	float output = 0;
+
+	Pose targetPose = {
+		.x = 100.0f,   // 100mm in X direction
+		.y = 50.0f,	   // 50mm in Y direction
+		.z = 150.0f,   // 150mm in Z direction
+		.yaw = 0.0f,   // 0 degrees yaw
+		.pitch = 0.0f, // 0 degrees pitch
+		.roll = 0.0f   // 0 degrees roll
+	};
 
 	// initalize pca9685 driver
 	PCA9685_Init();
-	// StartIKTask();
+	osDelay(1000);
+	char msg[50];
 
 	/* Infinite loop */
 	for (;;)
 	{
 
-		// if (xQueueReceive(adcQueue, receivedData, portMAX_DELAY) != pdTRUE)
-		// {
-		// 	continue;
-		// }
+		// Test, to see if servo moves
+		PCA9685_SetServoAngle(0, 90);
 
-		// char msg[64];
-		// int len = snprintf(msg, sizeof(msg),
-		// 				   "ADC: %u %u %u %u\r\n",
-		// 				   receivedData[0], receivedData[1],
-		// 				   receivedData[2], receivedData[3]);
-		// // create PID loop
+		osDelay(10000); // 10s
 
-		// Test for now
+		continue;
 
-		PCA9685_SetServoAngle(0, 90.0f);
-		osDelay(1000);
+		if (xQueueReceive(angleQ, &currentAngle, portMAX_DELAY) != pdTRUE)
+		{
+			continue;
+		}
+
+		// Calculate joint angles
+		bool ikSuccess = ik6_spherical(&ArmDimensions, &targetPose, jointDeg, true); // elbow up
+
+		if (!ikSuccess)
+		{
+			continue;
+		}
+
+		// for base angle
+		targetAngle = jointDeg[0];
+		sprintf(msg, "PID output = %.2f\r\n", targetAngle);
+		uart_print(msg);
+
+		// move servos
+		for (int i = 0; i < 6; i++)
+		{
+			PCA9685_SetServoAngle(i, to_servo_deg(i, jointDeg[i]));
+			osDelay(100);
+		}
+
+		osDelay(5000);
 	}
 	/* USER CODE END moveServo */
 }
@@ -241,14 +388,42 @@ void moveServo(void *argument)
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
 
+// don't need to call func this, stm32f4xx_it.c will call it
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
 	if (hadc->Instance == ADC1)
 	{
+		uint16_t *p = &adcBuff[ADC_BUF_LEN / 2];
 		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-		xSemaphoreGiveFromISR(adcSemaphore, &xHigherPriorityTaskWoken);
+		xQueueSendFromISR(adcBlockPtrQ, &p, &xHigherPriorityTaskWoken);
 		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 	}
+}
+
+void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef *hadc)
+{
+	if (hadc->Instance == ADC1)
+	{
+		uint16_t *p = &adcBuff[0];
+		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+		xQueueSendFromISR(adcBlockPtrQ, &p, &xHigherPriorityTaskWoken);
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+	}
+}
+
+void uart_print(const char *msg)
+{
+	HAL_UART_Transmit(&huart2, (uint8_t *)msg, strlen(msg), HAL_MAX_DELAY);
+}
+
+float to_servo_deg(int j, float ik_deg)
+{
+	float d = sign[j] * ik_deg + offset[j];
+	if (d < min[j])
+		d = min[j];
+	if (d > max[j])
+		d = max[j];
+	return d;
 }
 
 /* USER CODE END Application */
